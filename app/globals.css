@@ -1,0 +1,90 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+}
+
+/* --- UPDATED: Modern Vignette Gradient Background --- */
+body {
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* A darker, more dynamic gradient with deep blue/teal instead of purple */
+  background: linear-gradient(-45deg, #000000, #020617, #083344, #020617, #000000);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+
+/* Main Input Textarea styles */
+.prompt-textarea {
+  background-color: #1e293b; /* slate-800 */
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 2px rgba(0,0,0,0.7);
+  border: 1px solid #334155; /* slate-700 */
+  padding: 1rem 4rem 1rem 3.5rem;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.prompt-textarea:focus-within {
+  border-color: #4f46e5;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 3px rgba(79, 70, 229, 0.4);
+}
+
+.prompt-textarea textarea {
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 100%;
+  height: auto;
+  min-height: 60px;
+  resize: none;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.prompt-textarea textarea::placeholder {
+  color: var(--muted);
+}
+
+/* --- Animated Title Style --- */
+.title-animated-glow {
+    color: #ffffff;
+    text-shadow:
+        0 0 6px rgba(255, 255, 255, 0.7),
+        0 0 20px rgba(56, 189, 248, 0.5),
+        0 0 30px rgba(56, 189, 248, 0.3);
+    animation: water 5s ease-in-out infinite;
+}
+
+@keyframes water {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-3px) scale(1.01); }
+}
+
+/* --- NEW: 3D Hover Effect for Blog Output --- */
+.blog-output-container {
+  transform-style: preserve-3d;
+  transition: all 0.3s ease-out;
+  cursor: pointer;
+}
+
+.blog-output-container:hover {
+  transform: translateY(-12px) scale(1.03) rotateX(5deg);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+}
+
