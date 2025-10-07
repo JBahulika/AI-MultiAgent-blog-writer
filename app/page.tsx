@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+
+// ✅ Load PdfExtractor only in browser to avoid bundling `canvas` on server
+const PdfExtractor = dynamic(() => import("./components/PdfExtractor"), { ssr: false });
 
 export default function Home() {
   const [prd, setPrd] = useState("");
@@ -39,8 +43,13 @@ export default function Home() {
           Multi-Agent AI Blog Writer
         </h1>
         <p className="text-center text-gray-600 mb-8">
-          Paste your Product Requirements Document (PRD) below and generate a polished blog post powered by AI.
+          Paste your Product Requirements Document (PRD) below or upload a PDF to generate a polished blog post powered by AI.
         </p>
+
+        {/* ✅ PDF Extractor */}
+        <div className="mb-6">
+          <PdfExtractor onExtract={(text) => setPrd(text)} />
+        </div>
 
         {/* PRD Input */}
         <label htmlFor="prd" className="block text-sm font-medium text-gray-700 mb-2">
@@ -90,4 +99,3 @@ export default function Home() {
     </main>
   );
 }
-
