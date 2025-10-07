@@ -1,90 +1,93 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
 
-// ✅ Dynamically import PdfExtractor so it only runs on the client
-const PdfExtractor = dynamic(() => import("./components/PdfExtractor"), { ssr: false });
-
-export default function HomePage() {
-  const [prdText, setPrdText] = useState("");
+export default function Home() {
+  const [prd, setPrd] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState("");
+  const [blogPost, setBlogPost] = useState("");
+  const [error, setError] = useState("");
 
-  // Handle Generate button click
-  const handleGenerate = async () => {
-    if (!prdText.trim()) {
-      alert("Please provide a PRD first!");
-      return;
-    }
-
+  async function handleGenerate() {
     setLoading(true);
-    setResult("");
-
+    setError("");
+    setBlogPost("");
     try {
-      const response = await fetch("/api/generate", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prd: prdText }),
+        body: JSON.stringify({ prd }),
       });
-
-      if (!response.ok) throw new Error("API request failed");
-
-      // Handle streamed response if provided
-      const reader = response.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let data = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          data += decoder.decode(value, { stream: true });
-          setResult(data);
-        }
+      const data = await res.json();
+      if (res.ok) {
+        setBlogPost(data.blogPost);
       } else {
-        const json = await response.json();
-        setResult(JSON.stringify(json, null, 2));
+        setError(data.error || "Something went wrong");
       }
-    } catch (error) {
-      console.error("Error generating blog:", error);
-      alert("Something went wrong. Check the console for details.");
+    } catch (err: any) {
+      setError(err.message || "Failed to connect to server");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-3xl mx-auto bg-white rounded shadow p-6">
-        <h1 className="text-3xl font-bold mb-6 text-center">
-          AI Multi-Agent Blog Writer
+    <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex flex-col items-center px-4 py-12">
+      <div className="max-w-3xl w-full">
+        {/* Header */}
+        <h1 className="text-4xl font-extrabold text-indigo-700 text-center mb-6">
+          Multi-Agent AI Blog Writer
         </h1>
+        <p className="text-center text-gray-600 mb-8">
+          Paste your Product Requirements Document (PRD) below and generate a polished blog post powered by AI.
+        </p>
 
-        {/* ✅ Client-only PDF Extractor */}
-        <PdfExtractor onExtract={(text) => setPrdText(text)} />
-
+        {/* PRD Input */}
+        <label htmlFor="prd" className="block text-sm font-medium text-gray-700 mb-2">
+          Enter PRD:
+        </label>
         <textarea
-          className="w-full border rounded p-3 mb-4"
-          rows={8}
-          placeholder="Paste or upload your PRD text here..."
-          value={prdText}
-          onChange={(e) => setPrdText(e.target.value)}
+          id="prd"
+          rows={10}
+          value={prd}
+          onChange={(e) => setPrd(e.target.value)}
+          placeholder="Paste your PRD here..."
+          className="w-full p-4 rounded-xl border border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-700 placeholder-gray-400 transition"
         />
 
+        {/* Generate Button */}
         <button
           onClick={handleGenerate}
-          disabled={loading}
-          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          disabled={loading || !prd.trim()}
+          className={`mt-4 w-full py-3 rounded-xl font-semibold text-white transition ${
+            loading || !prd.trim()
+              ? "bg-indigo-300 cursor-not-allowed"
+              : "bg-indigo-600 hover:bg-indigo-700"
+          }`}
         >
-          {loading ? "Generating..." : "Generate Blog"}
+          {loading ? "Generating..." : "Generate Blog Post"}
         </button>
 
-        {result && (
-          <div className="mt-6 p-4 border rounded bg-gray-100 whitespace-pre-wrap">
-            {result}
+        {/* Error Message */}
+        {error && (
+          <div className="mt-4 p-3 text-red-700 bg-red-100 border border-red-200 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        {/* Output */}
+        {blogPost && (
+          <div className="mt-8 bg-white border border-gray-200 rounded-xl shadow-md p-6">
+            <h2 className="text-2xl font-bold text-indigo-700 mb-4">Generated Blog Post</h2>
+            <article className="prose max-w-none">
+              {blogPost.split("\n").map((line, idx) => (
+                <p key={idx}>{line}</p>
+              ))}
+            </article>
           </div>
         )}
       </div>
     </main>
   );
 }
+
