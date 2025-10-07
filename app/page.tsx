@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 
-// ✅ Dynamically import the PDF extractor so it never runs on the server
+// ✅ Dynamically import PdfExtractor so it only runs on the client
 const PdfExtractor = dynamic(() => import("./components/PdfExtractor"), { ssr: false });
 
 export default function HomePage() {
@@ -11,6 +11,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
 
+  // Handle Generate button click
   const handleGenerate = async () => {
     if (!prdText.trim()) {
       alert("Please provide a PRD first!");
@@ -21,15 +22,16 @@ export default function HomePage() {
     setResult("");
 
     try {
-      const res = await fetch("/api/generate", {
+      const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prd: prdText }),
       });
 
-      if (!res.ok) throw new Error("API error");
+      if (!response.ok) throw new Error("API request failed");
 
-      const reader = res.body?.getReader();
+      // Handle streamed response if provided
+      const reader = response.body?.getReader();
       if (reader) {
         const decoder = new TextDecoder();
         let data = "";
@@ -40,12 +42,12 @@ export default function HomePage() {
           setResult(data);
         }
       } else {
-        const json = await res.json();
+        const json = await response.json();
         setResult(JSON.stringify(json, null, 2));
       }
-    } catch (err) {
-      console.error(err);
-      alert("Error generating blog.");
+    } catch (error) {
+      console.error("Error generating blog:", error);
+      alert("Something went wrong. Check the console for details.");
     } finally {
       setLoading(false);
     }
@@ -53,16 +55,18 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
-        <h1 className="text-3xl font-bold mb-6 text-center">AI Multi-Agent Blog Writer</h1>
+      <div className="max-w-3xl mx-auto bg-white rounded shadow p-6">
+        <h1 className="text-3xl font-bold mb-6 text-center">
+          AI Multi-Agent Blog Writer
+        </h1>
 
-        {/* ✅ Client-only PDF extractor */}
+        {/* ✅ Client-only PDF Extractor */}
         <PdfExtractor onExtract={(text) => setPrdText(text)} />
 
         <textarea
-          className="w-full p-3 border rounded mb-4"
+          className="w-full border rounded p-3 mb-4"
           rows={8}
-          placeholder="Paste or upload your PRD here..."
+          placeholder="Paste or upload your PRD text here..."
           value={prdText}
           onChange={(e) => setPrdText(e.target.value)}
         />
