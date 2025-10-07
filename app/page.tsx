@@ -87,7 +87,8 @@ export default function Home() {
         await worker.terminate();
       } else if (file.type === "application/pdf") {
         setExtractionMessage("Extracting from PDF...");
-        const pdfjsLib = await import('pdfjs-dist/build/pdf');
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf');
+
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
         const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         for (let i = 1; i <= pdf.numPages; i++) {
