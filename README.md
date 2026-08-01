@@ -1,75 +1,147 @@
-# 📝 AI Multi-Agent Blog Writer
+# AI Multi-Agent Blog Writer
 
-🌐 **Live Demo:** [https://ai-multi-agent-blog-writer.vercel.app](https://ai-multi-agent-blog-writer.vercel.app)
+**Live Demo:** [https://ai-multi-agent-blog-writer.vercel.app](https://ai-multi-agent-blog-writer.vercel.app)
 
+> **PRD → Research (Tavily) → Draft → Fact-Check ↺ → Polish → Publish-ready blog**
 
-> **PRD ➡ Research ➡ Draft ➡ Fact-Check ➡ Style-Polish ➡ Publish-Ready Blog**  
-An **end-to-end production-grade pipeline** that uses **multiple AI agents** to transform a Product Requirements Document (PRD) into a **fact-checked, polished blog post** — deployed on **Vercel** with full logging and a clean, interactive UI.
+An end-to-end pipeline that turns a Product Requirements Document into a fact-checked blog post using specialized LLM agents, real web search, structured JSON I/O, and a transparent UI timeline.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=nextdotjs)
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![Groq](https://img.shields.io/badge/LLM-Groq%20%2F%20OpenAI-orange)
 ![Supabase](https://img.shields.io/badge/Supabase-Cloud-green?logo=supabase)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT4-412991?logo=openai)
 ![TailwindCSS](https://img.shields.io/badge/Styled%20with-TailwindCSS-38bdf8?logo=tailwindcss)
 
 ---
 
-## 🌟 Overview
-The **AI Multi-Agent Blog Writer** demonstrates how an automated AI-powered content pipeline can be **scalable, auditable, and production-ready**.
+## Overview
 
-Four specialized **LLM-powered agents** work in sequence:
-1. **Researcher Agent** – fetches factual information, references, and citations.  
-2. **Writer Agent** – generates a first draft blog using the PRD and research context.  
-3. **Fact-Checker Agent** – validates every claim against the research material with an automated retry loop for inaccuracies.  
-4. **Style-Polisher Agent** – adjusts tone, grammar, and clarity to produce a **publication-ready** article.
+Specialized agents run in sequence:
 
-All steps and intermediate results are **logged to Supabase Postgres** and displayed on a **timeline dashboard** for transparency.
+1. **Researcher** — plans search queries, calls **Tavily**, synthesizes sourced bullets (JSON).
+2. **Writer** — drafts the post from research with tone / length / audience / SEO controls.
+3. **Fact-Checker** — returns `{ verdict, issues[] }`; on FAIL, **Reviser** runs (max 2 rounds) then re-checks.
+4. **Style-Polisher** — final voice pass with an SEO `# ` title.
 
-## 📸 Demo Flow
-1)Paste a PRD(Product review document) → click Generate Blog
-2)Pipeline runs: Research → Draft → Fact-Check (auto-retry) → Polish
-3)View the Timeline Dashboard showing all intermediate steps and results
-4)Inspect metrics such as fact-check passes and token usage
+Each step streams to the UI (expandable notes), logs to Supabase, and reports token usage / estimated cost.
+
 ---
 
-## ⚙️ Architecture
+## Demo flow
 
-PRD → Researcher → Writer → Fact-Checker ↺ (retry if fail) → Style-Polisher → Final Blog
+1. Paste a PRD (or click **Use sample PRD**) and set tone, length, audience, SEO keywords.
+2. Pipeline runs: Research → Draft → Fact-Check (up to 2 revise rounds) → Polish.
+3. Expand agent cards to inspect notes, sources, issues, and drafts.
+4. Export via Download `.md`, Copy Markdown, Copy HTML, or Notion/Dev.to paste format.
+5. Review token totals and estimated cost on the timeline / result panel.
 
-|______ Logs & Metrics → Supabase _________|
+---
 
+## Architecture
+
+```
+PRD + controls
+  → Researcher (+ Tavily)
+  → Writer (strong model)
+  → Fact-Checker (fast model) ↺ reviser ≤ 2
+  → Polisher (strong model)
+  → Final blog + exports
+       ↘ agent_logs (Supabase) + SSE metrics
+```
 
 **Highlights**
-- **Next.js 14 + TypeScript** – unified frontend + backend orchestration.
-- **Supabase (Postgres)** – stores PRDs, drafts, logs, and metrics.
-- **OpenAI GPT-4 / GPT-3.5-Turbo** – core LLMs for writing, fact-checking, and polishing.
-- **TailwindCSS + React** – responsive, modern UI.
-- **Vercel Deployment** – secure, scalable serverless environment.
-- Environment variables configured for secure API key management.
+
+- **Next.js 15 + React 19 + TypeScript** — App Router API routes + SSE streaming.
+- **Groq-first LLMs** (OpenAI-compatible SDK), with OpenAI fallback. Fast model for research/fact-check; strong model for write/revise/polish.
+- **Tavily** — real web search for researcher citations.
+- **Structured JSON agent I/O** — no brittle free-text `PASS` regex.
+- **Upstash Redis** rate limits when configured (in-memory fallback for local dev).
+- **Supabase** — `agent_logs` for auditability and token/model fields.
+- **Vitest** — pipeline fixture tests with mocked LLM + search.
 
 ---
 
-## 🛠️ Tech Stack
-| Category                 | Tools / Frameworks |
-|--------------------------|--------------------|
-| **Frontend & UI**        | Next.js 14, React 18, TypeScript 5, TailwindCSS |
-| **Backend / Agents**     | Node.js 20, Next.js API Routes |
-| **Database & Storage**   | Supabase (Postgres) |
-| **LLM & NLP APIs**       | OpenAI GPT-4 / GPT-3.5-Turbo |
-| **Search / Retrieval**   | Optional SerpAPI for web search |
-| **Deployment**           | Vercel (Frontend + API Routes) |
-| **Dev Tools**            | Git, GitHub, ESLint, Prettier |
-| **Testing (optional)**   | Jest / Vitest for unit & pipeline tests |
+## Tech stack
+
+| Category | Tools |
+|----------|--------|
+| Frontend | Next.js 15, React 19, TypeScript 5, Tailwind CSS |
+| Agents | `lib/pipeline.ts` + `lib/agents/*` |
+| LLMs | Groq (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`) or OpenAI |
+| Search | Tavily |
+| Database | Supabase Postgres (`agent_logs`) |
+| Rate limits | Upstash Redis (optional) |
+| Deploy | Vercel |
+| Tests | Vitest |
 
 ---
 
-## 👤 Author & Contact
-J Bahulika – Final-Year AIML Student • Data Science & ML Enthusiast
-🌐 Portfolio: https://jbahulika.github.io
-💼 LinkedIn: https://www.linkedin.com/in/j-bahulika-8b8237207/
-📧 Email: jbahulika@gmail.com
+## Setup
 
-⭐ If you found this project insightful, please give it a star on GitHub!
+```bash
+npm install
+cp .env.example .env.local
+# fill GROQ_API_KEY (or OPENAI_*), TAVILY_API_KEY, SUPABASE_*
+npm run dev
+```
 
+### Required env
 
+| Variable | Purpose |
+|----------|---------|
+| `GROQ_API_KEY` or `OPENAI_API_KEY` | LLM access |
+| `TAVILY_API_KEY` | Optional — live web research (falls back to PRD-only) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Logging |
+
+### Recommended env
+
+| Variable | Purpose |
+|----------|---------|
+| `GROQ_MODEL_FAST` / `GROQ_MODEL_STRONG` | Per-role models |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Durable rate limits on Vercel |
+| `GENERATE_API_SECRET` | Optional server-only header gate for `/api/generate` |
+| `NEXT_PUBLIC_APP_URL` | Origin checks in production |
+
+---
+
+## Supabase schema (`agent_logs`)
+
+```sql
+create table if not exists agent_logs (
+  id bigint generated always as identity primary key,
+  run_id uuid default gen_random_uuid(),
+  agent text not null,
+  input text,
+  output text,
+  prompt_tokens int,
+  completion_tokens int,
+  model text,
+  created_at timestamptz default now()
+);
+
+-- If the table already exists, add metrics columns:
+alter table agent_logs add column if not exists prompt_tokens int;
+alter table agent_logs add column if not exists completion_tokens int;
+alter table agent_logs add column if not exists model text;
+```
+
+---
+
+## Scripts
+
+```bash
+npm run dev      # local Next.js
+npm run build    # production build
+npm test         # Vitest pipeline tests
+```
+
+---
+
+## Author
+
+J Bahulika – Final-Year AIML Student · Data Science & ML Enthusiast  
+Portfolio: https://jbahulika.github.io  
+LinkedIn: https://www.linkedin.com/in/j-bahulika-8b8237207/
+
+If you found this project useful, please star the repo on GitHub.
