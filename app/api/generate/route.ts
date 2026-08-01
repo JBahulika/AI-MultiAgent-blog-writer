@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabaseServer";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
@@ -5,6 +6,7 @@ import { runPipeline } from "@/lib/pipeline";
 import { normalizeOptions, type PipelineEvent } from "@/lib/agents/types";
 import { MIN_PRD_LENGTH, MAX_PRD_LENGTH } from "@/lib/prdLimits";
 import { PUBLIC_PIPELINE_FAILED, toPublicErrorMessage } from "@/lib/publicErrors";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,6 +41,28 @@ function sendUpdate(controller: ReadableStreamDefaultController, data: object) {
     controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
   } catch (e) {
     console.error("Error sending update:", e);
+  }
+}
+
+/** Prefer Supabase logging; never block generation if logging is misconfigured. */
+async function startRun(
+  supabase: SupabaseClient | null,
+  prd: string
+): Promise<{ run_id: string; supabase: SupabaseClient | null }> {
+  if (!supabase) {
+    return { run_id: randomUUID(), supabase: null };
+  }
+  try {
+    const { data: runRow, error: runErr } = await supabase
+      .from("agent_logs")
+      .insert([{ agent: "run_start", input: prd }])
+      .select("run_id")
+      .single();
+    if (runErr) throw runErr;
+    return { run_id: runRow.run_id as string, supabase };
+  } catch (err) {
+    console.error("Supabase run_start failed — continuing without logs:", err);
+    return { run_id: randomUUID(), supabase: null };
   }
 }
 
@@ -93,7 +117,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
+    if (!process.env.GROQ_API_KEY?.trim() && !process.env.OPENAI_API_KEY?.trim()) {
       return NextResponse.json(
         {
           error:
@@ -104,37 +128,25 @@ export async function POST(req: Request) {
     }
 
     const options = normalizeOptions(record);
-    let supabase;
+    let supabase: SupabaseClient | null = null;
     try {
       supabase = getServerSupabase();
     } catch (err) {
-      console.error("Supabase init error:", err);
-      return NextResponse.json(
-        {
-          error:
-            "The writing service isn’t configured correctly. Please try again later.",
-        },
-        { status: 503 }
-      );
+      console.error("Supabase init error — continuing without logs:", err);
+      supabase = null;
     }
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const { data: runRow, error: runErr } = await supabase
-            .from("agent_logs")
-            .insert([{ agent: "run_start", input: trimmed }])
-            .select("run_id")
-            .single();
-          if (runErr) throw runErr;
-          const run_id = runRow.run_id as string;
+          const started = await startRun(supabase, trimmed);
 
           await runPipeline({
             prd: trimmed,
             options,
-            run_id,
+            run_id: started.run_id,
             deps: {
-              supabase,
+              supabase: started.supabase,
               onEvent: (event: PipelineEvent) => sendUpdate(controller, event),
             },
           });
@@ -144,7 +156,6 @@ export async function POST(req: Request) {
           console.error("Streaming error:", err);
           sendUpdate(controller, {
             error: PUBLIC_PIPELINE_FAILED,
-            // Never forward raw provider/billing text to the browser
             details: toPublicErrorMessage(err),
           });
           controller.close();

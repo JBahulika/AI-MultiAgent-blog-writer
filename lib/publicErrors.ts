@@ -34,7 +34,7 @@ export function toPublicErrorMessage(err: unknown): string {
   const lower = raw.toLowerCase();
 
   if (
-    /insufficient.?quota|no credits remaining|billing|payment.?required|exceeded.?your.?current.?quota|credit balance/i.test(
+    /insufficient.?quota|no credits remaining|billing|payment.?required|exceeded.?your.?current.?quota|credit balance|llm_quota/i.test(
       lower
     )
   ) {
@@ -42,10 +42,9 @@ export function toPublicErrorMessage(err: unknown): string {
   }
 
   if (
-    /incorrect api key|invalid api key|invalid_api_key|authentication|unauthorized|401/.test(
+    /llm_auth|incorrect api key|invalid api key|invalid_api_key|authentication|unauthorized|401/.test(
       lower
-    ) &&
-    /api|key|auth|openai|groq|tavily/.test(lower)
+    )
   ) {
     return SAFE_AUTH;
   }
@@ -54,8 +53,16 @@ export function toPublicErrorMessage(err: unknown): string {
     return SAFE_RATE;
   }
 
-  if (/timeout|timed out|deadline|maxduration|econnreset/.test(lower)) {
+  if (/timeout|timed out|deadline|maxduration|econnreset|function.?invocation.?timeout/i.test(lower)) {
     return SAFE_TIMEOUT;
+  }
+
+  if (/llm_model|model.?not.?found|decommissioned/.test(lower)) {
+    return "The writing model is temporarily unavailable. Please try again later.";
+  }
+
+  if (/failed to parse json|researcher returned no bullets|writer returned empty|polisher returned empty|reviser returned empty/i.test(lower)) {
+    return "The AI returned an unexpected response. Please try generating again.";
   }
 
   if (/tavily/.test(lower)) {
@@ -64,6 +71,10 @@ export function toPublicErrorMessage(err: unknown): string {
 
   if (/missing groq_api_key|missing openai|missing.*api.?key/.test(lower)) {
     return SAFE_AUTH;
+  }
+
+  if (/llm_error/.test(lower)) {
+    return "The writing service had a temporary problem. Please try again in a moment.";
   }
 
   // Already-safe app messages we intentionally return to clients

@@ -82,25 +82,44 @@ export async function askLLM(params: {
   const { role, prompt, temperature = 0.4, maxTokens = 1200 } = params;
   const { client, model, provider } = getClientAndModel(role);
 
-  const res = await client.chat.completions.create({
-    model,
-    messages: [{ role: "user", content: prompt }],
-    temperature,
-    max_tokens: maxTokens,
-  });
+  try {
+    const res = await client.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature,
+      max_tokens: maxTokens,
+    });
 
-  const usage: TokenUsage = {
-    prompt_tokens: res.usage?.prompt_tokens ?? 0,
-    completion_tokens: res.usage?.completion_tokens ?? 0,
-    total_tokens: res.usage?.total_tokens ?? 0,
-  };
+    const usage: TokenUsage = {
+      prompt_tokens: res.usage?.prompt_tokens ?? 0,
+      completion_tokens: res.usage?.completion_tokens ?? 0,
+      total_tokens: res.usage?.total_tokens ?? 0,
+    };
 
-  return {
-    content: res.choices[0]?.message?.content || "",
-    usage,
-    model,
-    estimatedCostUsd: estimateCost(provider, usage),
-  };
+    return {
+      content: res.choices[0]?.message?.content || "",
+      usage,
+      model,
+      estimatedCostUsd: estimateCost(provider, usage),
+    };
+  } catch (err: unknown) {
+    const status =
+      typeof err === "object" && err !== null && "status" in err
+        ? Number((err as { status: unknown }).status)
+        : undefined;
+    const message = err instanceof Error ? err.message : String(err);
+
+    if (status === 429 || /rate limit|credits remaining|insufficient.?quota|billing/i.test(message)) {
+      throw new Error(`LLM_QUOTA: ${message}`);
+    }
+    if (status === 401 || status === 403 || /invalid.?api.?key|incorrect api key|authentication/i.test(message)) {
+      throw new Error(`LLM_AUTH: ${message}`);
+    }
+    if (status === 404 || /model.?not.?found|decommissioned|does not exist/i.test(message)) {
+      throw new Error(`LLM_MODEL: ${message}`);
+    }
+    throw new Error(`LLM_ERROR: ${message}`);
+  }
 }
 
 /** Test seam — inject a mock askLLM in unit tests. */
