@@ -3,11 +3,11 @@ import { getServerSupabase } from "@/lib/supabaseServer";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { runPipeline } from "@/lib/pipeline";
 import { normalizeOptions, type PipelineEvent } from "@/lib/agents/types";
+import { MIN_PRD_LENGTH, MAX_PRD_LENGTH } from "@/lib/prdLimits";
+import { PUBLIC_PIPELINE_FAILED, toPublicErrorMessage } from "@/lib/publicErrors";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-import { MIN_PRD_LENGTH, MAX_PRD_LENGTH } from "@/lib/prdLimits";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -95,13 +95,28 @@ export async function POST(req: Request) {
 
     if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
-        { error: "Server is missing GROQ_API_KEY or OPENAI_API_KEY." },
+        {
+          error:
+            "The writing service isn’t configured correctly. Please try again later.",
+        },
         { status: 503 }
       );
     }
 
     const options = normalizeOptions(record);
-    const supabase = getServerSupabase();
+    let supabase;
+    try {
+      supabase = getServerSupabase();
+    } catch (err) {
+      console.error("Supabase init error:", err);
+      return NextResponse.json(
+        {
+          error:
+            "The writing service isn’t configured correctly. Please try again later.",
+        },
+        { status: 503 }
+      );
+    }
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -127,8 +142,11 @@ export async function POST(req: Request) {
           controller.close();
         } catch (err) {
           console.error("Streaming error:", err);
-          const message = err instanceof Error ? err.message : "Agent pipeline failed";
-          sendUpdate(controller, { error: "Agent pipeline failed", details: message });
+          sendUpdate(controller, {
+            error: PUBLIC_PIPELINE_FAILED,
+            // Never forward raw provider/billing text to the browser
+            details: toPublicErrorMessage(err),
+          });
           controller.close();
         }
       },
@@ -144,6 +162,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("Initial POST error:", err);
-    return NextResponse.json({ error: "Failed to start generation" }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(err) },
+      { status: 500 }
+    );
   }
 }

@@ -12,6 +12,7 @@ import {
   MIN_PRD_LENGTH,
   truncatePrd,
 } from "@/lib/prdLimits";
+import { toPublicErrorMessage } from "@/lib/publicErrors";
 
 interface BlogOutput {
   title: string;
@@ -246,10 +247,13 @@ export default function Home() {
         throw new Error("Rate limit hit — please wait a minute and try again.");
       }
       if (!response.ok || !response.body) {
-        let serverMessage = `Server error: ${response.status}`;
+        let serverMessage =
+          "Something went wrong while generating your blog. Please try again in a moment.";
         try {
           const data = await response.json();
-          if (data?.error && typeof data.error === "string") serverMessage = data.error;
+          if (data?.error && typeof data.error === "string") {
+            serverMessage = toPublicErrorMessage(data.error);
+          }
         } catch {
           /* ignore */
         }
@@ -276,7 +280,11 @@ export default function Home() {
             console.error("Failed to parse stream data");
             continue;
           }
-          if (update.error) throw new Error(update.details || update.error);
+          if (update.error) {
+            throw new Error(
+              toPublicErrorMessage(update.details || update.error)
+            );
+          }
           if (update.agent) {
             setAgentStatuses((prev) => ({
               ...prev,
@@ -299,8 +307,7 @@ export default function Home() {
       const title = rawTitle.replace(/^(#+\s*)/, "");
       setBlogOutput({ title, paragraphs: contentLines });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "An unknown error occurred.";
-      setError(message);
+      setError(toPublicErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
