@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { parseJsonLoose } from "@/lib/json";
 
 export type AgentRole =
   | "researcher"
@@ -39,12 +40,16 @@ function estimateCost(provider: Provider, usage: TokenUsage): number {
   );
 }
 
+function emptyUsage(): TokenUsage {
+  return { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+}
+
 function getClientAndModel(role: AgentRole): {
   client: OpenAI;
   model: string;
   provider: Provider;
 } {
-  const groqKey = process.env.GROQ_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY?.trim();
   if (groqKey) {
     const fast = process.env.GROQ_MODEL_FAST || "llama-3.1-8b-instant";
     const strong =
@@ -61,7 +66,7 @@ function getClientAndModel(role: AgentRole): {
     };
   }
 
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
   if (!openaiKey) throw new Error("Missing GROQ_API_KEY or OPENAI_API_KEY");
 
   const fast = process.env.OPENAI_MODEL_FAST || "gpt-4o-mini";
@@ -78,8 +83,10 @@ export async function askLLM(params: {
   prompt: string;
   temperature?: number;
   maxTokens?: number;
+  /** Force JSON object output when the provider supports it (Groq/OpenAI). */
+  jsonMode?: boolean;
 }): Promise<LLMResult> {
-  const { role, prompt, temperature = 0.4, maxTokens = 1200 } = params;
+  const { role, prompt, temperature = 0.4, maxTokens = 1200, jsonMode = false } = params;
   const { client, model, provider } = getClientAndModel(role);
 
   try {
@@ -88,6 +95,7 @@ export async function askLLM(params: {
       messages: [{ role: "user", content: prompt }],
       temperature,
       max_tokens: maxTokens,
+      ...(jsonMode ? { response_format: { type: "json_object" as const } } : {}),
     });
 
     const usage: TokenUsage = {
@@ -103,6 +111,14 @@ export async function askLLM(params: {
       estimatedCostUsd: estimateCost(provider, usage),
     };
   } catch (err: unknown) {
+    // Some models reject response_format — retry once without it
+    if (jsonMode) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/response_format|json_object|not supported/i.test(message)) {
+        return askLLM({ ...params, jsonMode: false });
+      }
+    }
+
     const status =
       typeof err === "object" && err !== null && "status" in err
         ? Number((err as { status: unknown }).status)
@@ -122,5 +138,49 @@ export async function askLLM(params: {
   }
 }
 
-/** Test seam — inject a mock askLLM in unit tests. */
+/**
+ * Ask for JSON, parse it, and retry once with a repair prompt if parsing fails.
+ */
+export async function askLLMJson<T>(params: {
+  role: AgentRole;
+  prompt: string;
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<{ data: T; result: LLMResult }> {
+  const first = await askLLM({ ...params, jsonMode: true });
+  try {
+    return { data: parseJsonLoose<T>(first.content), result: first };
+  } catch {
+    /* repair pass */
+  }
+
+  const repair = await askLLM({
+    role: params.role,
+    temperature: 0,
+    maxTokens: params.maxTokens ?? 1200,
+    jsonMode: true,
+    prompt: `Convert the following text into valid JSON only. Do not add commentary.
+The JSON must match the schema requested earlier.
+
+Text:
+${first.content.slice(0, 6000)}`,
+  });
+
+  const combined: LLMResult = {
+    content: repair.content,
+    model: repair.model,
+    usage: {
+      prompt_tokens: first.usage.prompt_tokens + repair.usage.prompt_tokens,
+      completion_tokens: first.usage.completion_tokens + repair.usage.completion_tokens,
+      total_tokens: first.usage.total_tokens + repair.usage.total_tokens,
+    },
+    estimatedCostUsd: first.estimatedCostUsd + repair.estimatedCostUsd,
+  };
+
+  return { data: parseJsonLoose<T>(repair.content), result: combined };
+}
+
 export type AskLLMFn = typeof askLLM;
+export type AskLLMJsonFn = typeof askLLMJson;
+
+export { emptyUsage };

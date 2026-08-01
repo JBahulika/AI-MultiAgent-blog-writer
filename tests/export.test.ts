@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { toHtml, toMarkdown, slugifyTitle } from "@/lib/export";
+import { parseJsonLoose, markdownFallback } from "@/lib/json";
 
 describe("export helpers", () => {
   it("builds markdown and HTML", () => {
@@ -14,5 +15,18 @@ describe("export helpers", () => {
 
   it("slugifies titles", () => {
     expect(slugifyTitle("One Dashboard for MRR!")).toBe("one-dashboard-for-mrr");
+  });
+});
+
+describe("parseJsonLoose", () => {
+  it("repairs trailing commas and prose wrappers", () => {
+    const raw = `Sure!\n{"markdown": "Hello world",}\n`;
+    expect(parseJsonLoose<{ markdown: string }>(raw).markdown).toBe("Hello world");
+  });
+
+  it("falls back for plain markdown", () => {
+    expect(markdownFallback("# Title\n\nA longer paragraph about the product.")).toContain(
+      "# Title"
+    );
   });
 });
