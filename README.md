@@ -30,7 +30,7 @@ Each step streams to the UI (expandable notes), logs to Supabase, and reports to
 
 ## Demo flow
 
-1. Paste a PRD (or click **Use sample PRD**) and set tone, length, audience, SEO keywords.
+1. Paste a PRD (or upload a short PDF/DOCX) and set tone, length, audience, SEO keywords.
 2. Pipeline runs: Research → Draft → Fact-Check (up to 2 revise rounds) → Polish.
 3. Expand agent cards to inspect notes, sources, issues, and drafts.
 4. Export via Download `.md`, Copy Markdown, Copy HTML, or Notion/Dev.to paste format.

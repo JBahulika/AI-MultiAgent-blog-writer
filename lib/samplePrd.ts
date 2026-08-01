@@ -1,3 +1,4 @@
+/** Fixture PRD for unit tests only — not shown in the UI. */
 export const SAMPLE_PRD = `Product: PulseBoard — a lightweight SaaS analytics dashboard for early-stage startups.
 
 Problem: Founders juggle Stripe, Mixpanel, and spreadsheets and miss weekly revenue trends until it is too late.

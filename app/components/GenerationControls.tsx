@@ -12,7 +12,6 @@ type Props = {
   onWordCountChange: (w: WordCount) => void;
   onAudienceChange: (a: string) => void;
   onSeoKeywordsChange: (k: string) => void;
-  onSamplePrd: () => void;
 };
 
 const LENGTHS: { value: WordCount; label: string; hint: string }[] = [
@@ -95,25 +94,14 @@ export function GenerationControls({
   onWordCountChange,
   onAudienceChange,
   onSeoKeywordsChange,
-  onSamplePrd,
 }: Props) {
   return (
     <div className="mb-5 text-left rounded-2xl border border-slate-700/70 bg-slate-800/40 p-4 md:p-5 space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-100">Writing options</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Shape tone, length, and who you&apos;re writing for.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onSamplePrd}
-          disabled={disabled}
-          className="shrink-0 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 hover:border-cyan-400/50 transition-colors disabled:opacity-50"
-        >
-          Use sample PRD
-        </button>
+      <div>
+        <h2 className="text-sm font-semibold text-slate-100">Writing options</h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Shape tone, length, and who you&apos;re writing for.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

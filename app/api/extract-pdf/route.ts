@@ -2,12 +2,14 @@ import "@/lib/mathSumPrecisePolyfill";
 import { NextResponse } from "next/server";
 import { extractText, getDocumentProxy } from "unpdf";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import {
+  MAX_PDF_PAGES,
+  MAX_PRD_LENGTH,
+  MAX_UPLOAD_BYTES,
+  truncatePrd,
+} from "@/lib/prdLimits";
 
 export const runtime = "nodejs";
-
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-const MAX_TEXT_LENGTH = 20_000;
-const MAX_PAGES = 50;
 
 export async function POST(req: Request) {
   try {
@@ -38,17 +40,25 @@ export async function POST(req: Request) {
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     const pdf = await getDocumentProxy(bytes, {
-      // Quiet PDF.js warnings (missing Math APIs / font substitution noise)
       verbosity: 0,
       useSystemFonts: true,
       disableFontFace: true,
     });
-    const pageCount = Math.min(pdf.numPages || 0, MAX_PAGES);
+
+    const totalPages = pdf.numPages || 0;
+    if (totalPages > MAX_PDF_PAGES) {
+      return NextResponse.json(
+        {
+          error: `This PDF has ${totalPages} pages. Please upload a shorter brief (max ${MAX_PDF_PAGES} pages).`,
+        },
+        { status: 422 }
+      );
+    }
+
+    const pageCount = Math.min(totalPages, MAX_PDF_PAGES);
     const { text } = await extractText(pdf, { mergePages: true });
-    const merged = String(text)
-      .replace(/\n{3,}/g, "\n\n")
-      .trim()
-      .slice(0, MAX_TEXT_LENGTH);
+    const cleaned = String(text).replace(/\n{3,}/g, "\n\n").trim();
+    const { text: merged, truncated } = truncatePrd(cleaned);
 
     if (!merged) {
       return NextResponse.json(
@@ -57,7 +67,12 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ text: merged, pages: pageCount });
+    return NextResponse.json({
+      text: merged,
+      pages: pageCount,
+      truncated,
+      maxChars: MAX_PRD_LENGTH,
+    });
   } catch (err) {
     console.error("PDF extract error:", err);
     return NextResponse.json({ error: "Could not read this PDF." }, { status: 500 });

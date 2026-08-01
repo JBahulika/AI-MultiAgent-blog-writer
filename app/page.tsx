@@ -5,7 +5,13 @@ import { createWorker } from "tesseract.js";
 import { AgentTimeline, type AgentStatus } from "@/app/components/AgentTimeline";
 import { GenerationControls } from "@/app/components/GenerationControls";
 import { BlogResult } from "@/app/components/BlogResult";
-import { SAMPLE_PRD, type Tone, type WordCount } from "@/lib/samplePrd";
+import type { Tone, WordCount } from "@/lib/samplePrd";
+import {
+  MAX_PRD_LENGTH,
+  MAX_UPLOAD_BYTES,
+  MIN_PRD_LENGTH,
+  truncatePrd,
+} from "@/lib/prdLimits";
 
 interface BlogOutput {
   title: string;
@@ -21,7 +27,6 @@ interface AgentUpdate {
   details?: string;
   usage?: AgentStatus["usage"];
   round?: number;
-  metrics?: { total_tokens: number; estimatedCostUsd: number };
 }
 
 const PlusIcon = () => (
@@ -46,6 +51,12 @@ const GithubIcon = () => (
     <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
   </svg>
 );
+const CloseIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
 
 const initialAgentStatuses: Record<string, AgentStatus> = {
   researcher: { status: "pending" },
@@ -57,6 +68,8 @@ const initialAgentStatuses: Record<string, AgentStatus> = {
 
 export default function Home() {
   const [prd, setPrd] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadTruncated, setUploadTruncated] = useState(false);
   const [tone, setTone] = useState<Tone>("casual");
   const [wordCount, setWordCount] = useState<WordCount>(300);
   const [audience, setAudience] = useState("startup founders");
@@ -70,11 +83,11 @@ export default function Home() {
   const [agentStatuses, setAgentStatuses] = useState(initialAgentStatuses);
 
   useEffect(() => {
-    if (textareaRef.current) {
+    if (textareaRef.current && !uploadedFile) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
-  }, [prd, isExtracting]);
+  }, [prd, uploadedFile, isExtracting]);
 
   const resetState = () => {
     setBlogOutput(null);
@@ -83,7 +96,6 @@ export default function Home() {
     setAgentStatuses(initialAgentStatuses);
   };
 
-  const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
   const ALLOWED_UPLOAD_TYPES = new Set([
     "text/plain",
     "text/markdown",
@@ -98,6 +110,23 @@ export default function Home() {
     "image/gif",
     "image/bmp",
   ]);
+
+  const applyExtractedText = (raw: string, file: File) => {
+    const { text, truncated } = truncatePrd(raw);
+    if (!text.trim()) {
+      throw new Error(
+        "No text found in this file. Try another document, a clearer photo, or paste the PRD manually."
+      );
+    }
+    setPrd(text);
+    setUploadedFile(file);
+    setUploadTruncated(truncated);
+    if (truncated) {
+      setError(
+        `Document was trimmed to the first ${MAX_PRD_LENGTH.toLocaleString()} characters (max PRD size).`
+      );
+    }
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -123,8 +152,10 @@ export default function Home() {
     }
 
     setError("");
+    setUploadTruncated(false);
     setIsExtracting(true);
     setExtractionMessage("Processing file...");
+    setUploadedFile(null);
     setPrd("");
     try {
       let textContent = "";
@@ -148,6 +179,7 @@ export default function Home() {
           );
         }
         textContent = typeof data.text === "string" ? data.text : "";
+        if (data.truncated) setUploadTruncated(true);
       } else if (
         file.type ===
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -163,30 +195,35 @@ export default function Home() {
         setExtractionMessage("Reading text file...");
         textContent = await file.text();
       }
-      if (!textContent.trim()) {
-        throw new Error(
-          "No text found in this file. Try another document, a clearer photo, or paste the PRD manually."
-        );
-      }
-      if (textContent.length > 20_000) textContent = textContent.slice(0, 20_000);
-      setPrd(textContent);
+      applyExtractedText(textContent, file);
     } catch (e) {
       console.error(e);
       const message =
         e instanceof Error ? e.message : "Could not read file. Check format or permissions.";
       setError(message);
+      setUploadedFile(null);
+      setPrd("");
     } finally {
       setIsExtracting(false);
       setExtractionMessage("");
     }
   };
 
+  const clearFile = () => {
+    setUploadedFile(null);
+    setPrd("");
+    setUploadTruncated(false);
+    setError("");
+  };
+
   async function handleGenerate() {
     if (!prd.trim()) return;
-    if (prd.trim().length < 20) {
-      setError(
-        "PRD is too short. Paste a fuller product brief or click “Use sample PRD”."
-      );
+    if (prd.trim().length < MIN_PRD_LENGTH) {
+      setError(`PRD is too short. Please provide at least ${MIN_PRD_LENGTH} characters.`);
+      return;
+    }
+    if (prd.length > MAX_PRD_LENGTH) {
+      setError(`PRD is too long. Maximum ${MAX_PRD_LENGTH.toLocaleString()} characters.`);
       return;
     }
     resetState();
@@ -271,13 +308,6 @@ export default function Home() {
 
   const renderOutput = () => {
     if (isLoading) return <AgentTimeline statuses={agentStatuses} />;
-    if (error) {
-      return (
-        <div className="bg-red-900/40 p-4 rounded-lg border border-red-700 text-red-300 whitespace-pre-wrap text-left">
-          {error}
-        </div>
-      );
-    }
     if (blogOutput) {
       return (
         <div className="space-y-4">
@@ -309,14 +339,9 @@ export default function Home() {
           onWordCountChange={setWordCount}
           onAudienceChange={setAudience}
           onSeoKeywordsChange={setSeoKeywords}
-          onSamplePrd={() => {
-            setPrd(SAMPLE_PRD);
-            setSeoKeywords("analytics dashboard, MRR, SaaS");
-            setError("");
-          }}
         />
 
-        <div className="prompt-textarea mb-6">
+        <div className="prompt-textarea mb-2">
           <div className="absolute left-4 top-1/2 -translate-y-1/2">
             <input
               type="file"
@@ -337,11 +362,38 @@ export default function Home() {
             <div className="flex items-center justify-center w-full pl-12 pr-12 min-h-[60px] text-gray-400">
               {extractionMessage}
             </div>
+          ) : uploadedFile ? (
+            <div className="flex items-center w-full pl-12 pr-12 min-h-[60px]">
+              <div className="bg-slate-700/60 rounded-full px-3 py-1.5 flex items-center gap-2.5 max-w-full">
+                <span className="text-sm font-medium text-gray-200 truncate">{uploadedFile.name}</span>
+                <span className="text-xs text-slate-400 whitespace-nowrap">
+                  {prd.length.toLocaleString()} chars
+                  {uploadTruncated ? " · trimmed" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearFile}
+                  className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                  aria-label="Remove file"
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+            </div>
           ) : (
             <textarea
               ref={textareaRef}
               value={prd}
-              onChange={(e) => setPrd(e.target.value)}
+              onChange={(e) => {
+                const { text, truncated } = truncatePrd(e.target.value);
+                setPrd(text);
+                if (truncated) {
+                  setError(
+                    `PRD capped at ${MAX_PRD_LENGTH.toLocaleString()} characters.`
+                  );
+                }
+              }}
+              maxLength={MAX_PRD_LENGTH}
               placeholder="Type or paste a PRD, or upload PDF / Word (.docx) / image / text…"
               rows={1}
               disabled={isLoading}
@@ -357,6 +409,23 @@ export default function Home() {
             </button>
           </div>
         </div>
+        {!uploadedFile && !isExtracting && (
+          <p className="text-xs text-slate-500 mb-6 text-right pr-1">
+            {prd.length.toLocaleString()} / {MAX_PRD_LENGTH.toLocaleString()} characters
+          </p>
+        )}
+        {uploadedFile && !isExtracting && (
+          <p className="text-xs text-slate-500 mb-6 text-left pl-1">
+            Document loaded — text is kept in memory for generation (not shown in full below).
+          </p>
+        )}
+
+        {!blogOutput && error && !isLoading && (
+          <div className="mb-4 bg-red-900/40 p-4 rounded-lg border border-red-700 text-red-300 whitespace-pre-wrap text-left">
+            {error}
+          </div>
+        )}
+
         <div className="mt-8 w-full">{renderOutput()}</div>
       </div>
       <footer className="w-full max-w-3xl mx-auto text-center pt-20 pb-8">

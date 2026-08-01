@@ -7,8 +7,7 @@ import { normalizeOptions, type PipelineEvent } from "@/lib/agents/types";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MIN_PRD_LENGTH = 20;
-const MAX_PRD_LENGTH = 20_000;
+import { MIN_PRD_LENGTH, MAX_PRD_LENGTH } from "@/lib/prdLimits";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -82,7 +81,7 @@ export async function POST(req: Request) {
     if (trimmed.length < MIN_PRD_LENGTH) {
       return NextResponse.json(
         {
-          error: `PRD is too short. Please provide at least ${MIN_PRD_LENGTH} characters (paste a fuller product brief or use Sample PRD).`,
+          error: `PRD is too short. Please provide at least ${MIN_PRD_LENGTH} characters.`,
         },
         { status: 400 }
       );
