@@ -348,7 +348,7 @@ export default function Home() {
           onSeoKeywordsChange={setSeoKeywords}
         />
 
-        <div className="prompt-textarea mb-2">
+        <div className="prompt-textarea mb-6">
           <div className="absolute left-4 top-1/2 -translate-y-1/2">
             <input
               type="file"
@@ -417,13 +417,8 @@ export default function Home() {
           </div>
         </div>
         {!uploadedFile && !isExtracting && (
-          <p className="text-xs text-slate-500 mb-6 text-right pr-1">
+          <p className="text-xs text-slate-500 -mt-4 mb-6 text-right pr-1">
             {prd.length.toLocaleString()} / {MAX_PRD_LENGTH.toLocaleString()} characters
-          </p>
-        )}
-        {uploadedFile && !isExtracting && (
-          <p className="text-xs text-slate-500 mb-6 text-left pl-1">
-            Document loaded — text is kept in memory for generation (not shown in full below).
           </p>
         )}
 
